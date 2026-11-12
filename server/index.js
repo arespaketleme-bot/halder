@@ -123,7 +123,10 @@ app.get('/api/yayin/liste', girisli, (req, res) => {
   // Tutarın kendisi istemciye gönderilmez, sadece renk seviyesi.
   // Komisyoncu sayısı kapalıysa hiç gönderilmez.
   res.json({ acik: p.acik, bitis: p.bitis, seviyeler: SEVIYELER, goster_kom: a.goster_kom, goster_arama: a.goster_arama,
-    liste: rows.map(r => ({ tuccar: r.tuccar, seviye: seviye(r.toplam), ...(a.goster_kom ? { kom_sayisi: r.kom_sayisi } : {}) })) });
+    liste: rows.map(r => ({ tuccar: r.tuccar, seviye: seviye(r.toplam),
+      ...(a.goster_kom ? { kom_sayisi: r.kom_sayisi } : {}),
+      // Toplam tutar sadece admine gönderilir.
+      ...(req.user.rol === 'admin' ? { toplam: r.toplam } : {}) })) });
 });
 
 // ---------- komisyoncu: alacaklar ----------

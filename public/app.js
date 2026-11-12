@@ -177,7 +177,7 @@ const V = {
       const sut = d.goster_kom ? 3 : 2;
       const gorunen = L.filter(x => x.tuccar.toLocaleLowerCase('tr').includes(q));
       $('#yt').innerHTML = `<tr><th class="sirala" title="Alfabetik sırala">Tüccar${ok}</th><th>Toplam borç</th>${d.goster_kom ? '<th>Komisyoncu sayısı</th>' : ''}</tr>
-        ${gorunen.map(x => `<tr><td>${esc(x.tuccar)}</td><td><span class="sev s${x.seviye}" title="${esc(seviyeAd(d.seviyeler, x.seviye))}"></span></td>${d.goster_kom ? `<td>${x.kom_sayisi}</td>` : ''}</tr>`).join('')
+        ${gorunen.map(x => `<tr><td>${esc(x.tuccar)}</td><td><span class="sev s${x.seviye}" title="${esc(seviyeAd(d.seviyeler, x.seviye))}"></span>${x.toplam != null ? ` <b class="admtop">${tl(x.toplam)}</b>` : ''}</td>${d.goster_kom ? `<td>${x.kom_sayisi}</td>` : ''}</tr>`).join('')
           || `<tr><td colspan=${sut} class="mut">${d.liste.length ? 'Eşleşen tüccar yok' : 'Açık alacak yok'}</td></tr>`}`;
       $('#yt .sirala').onclick = () => { sira = sira === 1 ? -1 : sira === -1 ? null : 1; tablo(); };
     };

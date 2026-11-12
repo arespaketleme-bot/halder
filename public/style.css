@@ -33,3 +33,4 @@ i.sev{width:22px;height:14px;margin-right:6px}
 th.sirala{cursor:pointer;user-select:none;color:var(--pri)}
 .btn.emin{background:var(--red);color:#fff;border-color:var(--red)}
 .toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:var(--pri);color:#fff;padding:10px 16px;border-radius:8px;box-shadow:0 4px 16px #0003;z-index:9;max-width:calc(100% - 32px)}.toast.hata{background:var(--red)}
+.admtop{margin-left:8px;font-variant-numeric:tabular-nums;white-space:nowrap}
