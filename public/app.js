@@ -18,7 +18,15 @@ async function api(yol, { method = 'GET', body, raw } = {}) {
 let ben = null, tab = null, durum = null, saatFark = 0;
 const kisa = n => n >= 1e6 ? (n / 1e6).toLocaleString('tr-TR') + ' milyon' : n.toLocaleString('tr-TR');
 const seviyeAd = (S, i) => i === 0 ? `0 – ${kisa(S[0])} ₺` : i >= S.length ? `${kisa(S[S.length - 1])} ₺ ve üzeri` : `${kisa(S[i - 1])} – ${kisa(S[i])} ₺`;
-const lejant = S => `<div class="lejant">${[...S, 0].map((_, i) => `<span><i class="sev s${i}"></i>${seviyeAd(S, i)}</span>`).join('')}</div>`;
+// Renk şeridi: her seviye bir dilim, altında dilimin başladığı tutar (milyon ₺).
+const lejant = S => {
+  const n = S.length + 1, cols = `grid-template-columns:repeat(${n},1fr)`;
+  const etiket = ['0', ...S.map(v => (v / 1e6).toLocaleString('tr-TR'))];
+  return `<div class="lejant" aria-label="Borç seviyeleri">
+    <div class="lj-bar" style="${cols}">${etiket.map((_, i) => `<span class="sev s${i}" title="${esc(seviyeAd(S, i))}"></span>`).join('')}</div>
+    <div class="lj-etk" style="${cols}">${etiket.map((e, i) => `<span>${e}${i === n - 1 ? '+' : ''}</span>`).join('')}</div>
+    <div class="lj-not">milyon ₺ · ayrıntı için renklerin üzerine gelin</div></div>`;
+};
 function bildir(mesaj, hataMi = false) {
   const d = document.createElement('div');
   d.className = 'toast' + (hataMi ? ' hata' : '');
