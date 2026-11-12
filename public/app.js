@@ -208,7 +208,7 @@ const V = {
       <label class="chk"><input type="checkbox" id="a_ara" ${a.goster_arama ? 'checked' : ''}> Tüccar arama kutusu</label>
       <p id="a_m" class="ok"></p><button class="btn p" id="a_k">Kaydet</button></div>
       <div class="card"><h2>Manuel kontrol</h2><div class="row"><button class="btn p" id="a_ac">Şimdi yayınla (${a.sure} dk)</button><button class="btn d" id="a_kp">Yayını hemen kapat</button></div></div>
-      ${ben.demo ? '<div class="card mut">Demo hesabındasınız: ayarları görebilir ama değiştiremezsiniz.</div>' : `
+      ${ben.demo ? '<div class="card mut"><b>Demo hesabındasınız.</b> Buradaki ayarlar ve yayın aç/kapat sadece demo hesaplarını etkiler; gerçek yayın değişmez.</div>' : `
       <div class="card"><h2>Demo modu <span class="pill ${a.demo_modu ? 'w' : ''}">${a.demo_modu ? 'Açık' : 'Kapalı'}</span></h2>
         <p class="mut">Açıkken giriş ekranında demo hesaplar listelenir ve herkes <b>demo1234</b> şifresiyle deneme yapabilir.
         Demo hesaplar sadece demo verilerini görür; gerçek tüccar ve alacak kayıtlarınız onlara hiç gösterilmez.

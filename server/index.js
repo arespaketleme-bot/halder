@@ -122,17 +122,17 @@ app.get('/api/demo/hesaplar', h(async (req, res) => {
 app.get('/api/ben', girisli, (req, res) => res.json(req.user));
 
 // ---------- yayın ----------
-app.get('/api/yayin/durum', girisli, h(async (req, res) => res.json({ ...pencere(await ayarGetir()), simdi: Date.now() })));
+app.get('/api/yayin/durum', girisli, h(async (req, res) => res.json({ ...pencere(await ayarGetir(req.user.demo)), simdi: Date.now() })));
 app.get('/api/yayin/liste', girisli, h(async (req, res) => {
-  const a = await ayarGetir();
+  const a = await ayarGetir(req.user.demo);
   const p = pencere(a);
-  // Demo kullanıcılar listeyi yayın saatini beklemeden görebilir (sadece demo verisi).
-  if (!p.acik && req.user.rol !== 'admin' && !req.user.demo) return hata(res, 423, 'Liste şu an yayında değil');
+  // Demo kullanıcılar demo yayın ayarlarına (demo admin'in belirlediği pencereye) tabidir.
+  if (!p.acik && req.user.rol !== 'admin') return hata(res, 423, 'Liste şu an yayında değil');
   const rows = await all(`SELECT MAX(tuccar) tuccar, SUM(tutar_kurus) toplam, COUNT(DISTINCT kom_id) kom_sayisi
     FROM halder_alacak WHERE durum!='tahsil' AND demo=? GROUP BY tuccar_key ORDER BY toplam DESC`, [D(req)]);
   // Tutarın kendisi komisyoncuya gönderilmez, sadece renk seviyesi.
   // Komisyoncu sayısı kapalıysa hiç gönderilmez.
-  res.json({ acik: p.acik || req.user.demo, demo: req.user.demo, bitis: p.bitis, seviyeler: SEVIYELER, goster_kom: a.goster_kom, goster_arama: a.goster_arama,
+  res.json({ acik: p.acik, demo: req.user.demo, bitis: p.bitis, seviyeler: SEVIYELER, goster_kom: a.goster_kom, goster_arama: a.goster_arama,
     liste: rows.map(r => ({ tuccar: r.tuccar, seviye: seviye(r.toplam),
       ...(a.goster_kom ? { kom_sayisi: r.kom_sayisi } : {}),
       // Toplam tutar sadece admine gönderilir.
@@ -228,18 +228,18 @@ app.post('/api/excel/aktar', girisli, kom, h(async (req, res) => {
 }));
 
 // ---------- admin ----------
-app.get('/api/admin/ayar', girisli, admin, h(async (req, res) => res.json(await ayarGetir())));
-app.put('/api/admin/ayar', girisli, admin, gercek, h(async (req, res) => {
+app.get('/api/admin/ayar', girisli, admin, h(async (req, res) => res.json(await ayarGetir(req.user.demo))));
+app.put('/api/admin/ayar', girisli, admin, h(async (req, res) => {
   const { gun, saat, sure, aktif, goster_kom, goster_arama } = req.body;
   if (!Number.isInteger(gun) || gun < 0 || gun > 6 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(saat) || !Number.isInteger(sure) || sure < 5 || sure > 720)
     return hata(res, 400, 'Geçersiz ayar');
-  const a = { ...(await ayarGetir()), gun, saat, sure, aktif: !!aktif, goster_kom: !!goster_kom, goster_arama: !!goster_arama, kapat_bitis: null };
-  await ayarKaydet(a);
+  const a = { ...(await ayarGetir(req.user.demo)), gun, saat, sure, aktif: !!aktif, goster_kom: !!goster_kom, goster_arama: !!goster_arama, kapat_bitis: null };
+  await ayarKaydet(a, req.user.demo);
   await logYaz(req.user.id, `Yayın ayarı: gün=${gun} saat=${saat} süre=${sure}dk otomatik=${a.aktif ? 'açık' : 'kapalı'} komisyoncu sayısı=${a.goster_kom ? 'göster' : 'gizle'} arama=${a.goster_arama ? 'açık' : 'kapalı'}`);
   res.json(a);
 }));
-app.post('/api/admin/yayin', girisli, admin, gercek, h(async (req, res) => {
-  const a = await ayarGetir();
+app.post('/api/admin/yayin', girisli, admin, h(async (req, res) => {
+  const a = await ayarGetir(req.user.demo);
   if (req.body.ac) {
     a.manuel_bitis = Date.now() + a.sure * 60_000;
     a.kapat_bitis = null;
@@ -248,7 +248,7 @@ app.post('/api/admin/yayin', girisli, admin, gercek, h(async (req, res) => {
     a.manuel_bitis = null;
     a.kapat_bitis = p.acik && !p.manuel ? p.bitis : null;
   }
-  await ayarKaydet(a);
+  await ayarKaydet(a, req.user.demo);
   await logYaz(req.user.id, req.body.ac ? `Manuel yayın başlatıldı (${a.sure} dk)` : 'Yayın manuel kapatıldı');
   res.json(pencere(a));
 }));

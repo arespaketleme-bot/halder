@@ -43,5 +43,5 @@ Tablolar `halder_` önekiyle oluşturulur, aynı Supabase veritabanındaki diğe
 Admin → **Yayın Ayarları** → **Demo modu** ile açılıp kapatılır (sadece gerçek admin).
 - Açıkken giriş ekranında demo hesaplar listelenir (şifre `demo1234`, bkz. `server/seed-data.js`).
 - Demo kayıtları `demo` sütunuyla işaretlidir: demo hesaplar sadece demo verisini, gerçek hesaplar sadece gerçek veriyi görür.
-- Demo admin ayarları görebilir ama yayın ayarlarını, yayını ve demo modunu değiştiremez.
+- Demo hesapların kendi yayın ayarları vardır: demo admin gün/saat/süre, görünürlük ve yayın aç/kapat ayarlarını değiştirebilir; bunlar sadece demo hesaplarını etkiler. Demo modunu sadece gerçek admin açıp kapatır.
 - Kapatınca demo hesaplarla giriş yapılamaz ve açık demo oturumları kapanır.

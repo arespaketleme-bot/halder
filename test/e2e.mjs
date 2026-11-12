@@ -49,11 +49,24 @@ await t('demo girişleri', async () => {
   assert.equal((await giris('x', { telefon: K1.telefon, sifre: 'yanlis' })).s, 401);
   assert.equal((await c('k1', '/ben')).d.demo, true);
 });
-await t('yetkiler: demo admin gerçek ayarları değiştiremez', async () => {
+await t('demo admin kendi (demo) ayarlarını değiştirir, gerçek ayarlar etkilenmez', async () => {
   assert.equal((await c('z', '/yayin/liste')).s, 401);
-  assert.equal((await c('da', '/admin/ayar', { m: 'PUT', json: { gun: 1, saat: '10:00', sure: 60, aktif: true } })).s, 403);
-  assert.equal((await c('da', '/admin/yayin', { m: 'POST', json: { ac: true } })).s, 403);
-  assert.equal((await c('da', '/admin/demo', { m: 'POST', json: { acik: false } })).s, 403);
+  const gercekOnce = (await c('a', '/admin/ayar')).d;
+  const r = await c('da', '/admin/ayar', { m: 'PUT', json: { gun: 2, saat: '14:30', sure: 45, aktif: true, goster_kom: false, goster_arama: false } });
+  assert.equal(r.s, 200);
+  const demoAyar = (await c('da', '/admin/ayar')).d;
+  assert.equal(demoAyar.gun, 2); assert.equal(demoAyar.saat, '14:30'); assert.equal(demoAyar.goster_kom, false);
+  const gercekSonra = (await c('a', '/admin/ayar')).d;
+  for (const k of ['gun', 'saat', 'sure', 'goster_kom', 'goster_arama']) assert.deepEqual(gercekSonra[k], gercekOnce[k], 'gerçek ayar değişmemeli: ' + k);
+  // Demo yayın penceresi: demo admin açıp kapatır, sadece demo komisyoncuları etkiler.
+  await c('da', '/admin/yayin', { m: 'POST', json: { ac: false } });
+  assert.equal((await c('k1', '/yayin/liste')).s, 423, 'demo yayın kapalıyken demo komisyoncu göremez');
+  await c('da', '/admin/yayin', { m: 'POST', json: { ac: true } });
+  const k = (await c('k1', '/yayin/liste')).d;
+  assert.ok(k.acik && k.liste.length && !k.liste.some(x => 'kom_sayisi' in x), 'demo ayarı (komisyoncu sayısı gizli) uygulanmalı');
+  await c('da', '/admin/ayar', { m: 'PUT', json: { gun: 6, saat: '10:00', sure: 60, aktif: true, goster_kom: true, goster_arama: true } });
+  await c('da', '/admin/yayin', { m: 'POST', json: { ac: true } });
+  assert.equal((await c('da', '/admin/demo', { m: 'POST', json: { acik: false } })).s, 403, 'demo modunu sadece gerçek admin değiştirir');
   assert.equal((await c('k1', '/admin/alacak')).s, 403);
   assert.equal((await c('a', '/alacak')).s, 403);
 });
@@ -103,7 +116,7 @@ await t('yayın penceresi ve görünürlük', async () => {
   await c('a', '/admin/yayin', { m: 'POST', json: { ac: false } });
   assert.equal((await c('gk', '/yayin/liste')).s, 423, 'gerçek komisyoncu yayın dışında göremez');
   let k = (await c('k1', '/yayin/liste')).d;
-  assert.ok(k.acik && k.liste.length, 'demo komisyoncu her zaman demo listesini görür');
+  assert.ok(k.acik && k.liste.length, 'gerçek yayını kapatmak demo yayınını etkilememeli');
   assert.ok(!k.liste.some(x => x.tuccar === 'E2E Gerçek Tüccar'));
   assert.ok(!k.liste.some(x => 'toplam' in x), 'komisyoncu toplamı görmemeli');
   assert.ok((await c('a', '/yayin/liste')).d.liste.every(x => typeof x.toplam === 'number'), 'admin toplamı görmeli');

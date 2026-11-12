@@ -163,12 +163,15 @@ export async function demoYukle() {
 
 const VARSAYILAN = { gun: 6, saat: '10:00', sure: 60, aktif: true, goster_kom: true, goster_arama: true, demo_modu: false, manuel_bitis: null, kapat_bitis: null };
 
-export async function ayarGetir() {
-  const row = await get("SELECT v FROM halder_ayar WHERE k='yayin'");
+// Gerçek ve demo yayın ayarları ayrı tutulur ('yayin' / 'yayin_demo'); demo admin gerçek yayını etkileyemez.
+// demo_modu bayrağı sadece gerçek ayarda anlamlıdır.
+const ANAHTAR = demo => (demo ? 'yayin_demo' : 'yayin');
+export async function ayarGetir(demo = false) {
+  const row = await get('SELECT v FROM halder_ayar WHERE k=?', [ANAHTAR(demo)]);
   return { ...VARSAYILAN, ...(row ? JSON.parse(row.v) : {}) };
 }
-export async function ayarKaydet(a) {
-  await run("INSERT INTO halder_ayar(k,v) VALUES('yayin',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [JSON.stringify(a)]);
+export async function ayarKaydet(a, demo = false) {
+  await run('INSERT INTO halder_ayar(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v', [ANAHTAR(demo), JSON.stringify(a)]);
 }
 
 export function hashle(sifre) {
