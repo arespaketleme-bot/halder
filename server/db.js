@@ -106,12 +106,23 @@ END $$;`;
 
 export async function init() {
   if (PG) { await exec(SEMA); await exec(RLS); } else exec.__sqlite.exec(SEMA);
-  // İlk admin: ortam değişkenleriyle, sadece hiç admin yoksa oluşturulur.
+  // Admin hesabı ortam değişkenlerinden yönetilir: ADMIN_TELEFON'lu admin yoksa oluşturulur,
+  // varsa şifresi her açılışta ADMIN_SIFRE ile eşitlenir (şifreyi Render'dan değiştirmek yeter).
   const { ADMIN_TELEFON, ADMIN_SIFRE, ADMIN_AD } = process.env;
-  if (ADMIN_TELEFON && ADMIN_SIFRE && !(await get("SELECT 1 FROM halder_users WHERE rol='admin'"))) {
-    await run("INSERT INTO halder_users(ad,telefon,sifre_hash,rol,durum) VALUES (?,?,?,'admin','onayli')",
-      [ADMIN_AD || 'Admin', ADMIN_TELEFON, hashle(ADMIN_SIFRE)]);
-    console.log('İlk admin hesabı oluşturuldu.');
+  if (ADMIN_TELEFON && ADMIN_SIFRE) {
+    const tel = ADMIN_TELEFON.replace(/\D/g, '').replace(/^90/, '').replace(/^(?!0)/, '0');
+    const mevcut = await get('SELECT id, rol FROM halder_users WHERE telefon=?', [tel]);
+    if (!mevcut) {
+      await run("INSERT INTO halder_users(ad,telefon,sifre_hash,rol,durum) VALUES (?,?,?,'admin','onayli')",
+        [ADMIN_AD || 'Admin', tel, hashle(ADMIN_SIFRE)]);
+      console.log('Admin hesabı oluşturuldu.');
+    } else if (mevcut.rol === 'admin') {
+      await run("UPDATE halder_users SET sifre_hash=?, durum='onayli' WHERE id=?", [hashle(ADMIN_SIFRE), mevcut.id]);
+      await run('DELETE FROM halder_sessions WHERE user_id=?', [mevcut.id]);
+      console.log('Admin şifresi ADMIN_SIFRE ile eşitlendi.');
+    } else {
+      console.error('ADMIN_TELEFON bir komisyoncu hesabına ait; admin yapılmadı.');
+    }
   }
 }
 
