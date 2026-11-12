@@ -49,7 +49,8 @@ const kom = (req, res, next) => (req.user?.rol === 'kom' ? next() : hata(res, 40
 const anahtar = ad => ad.toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim();
 
 // Yayında tutar yerine gösterilen seviye (renk). Sınırlar TL cinsinden.
-const SEVIYELER = [1_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000, 100_000_000];
+// 0-1, 1-5, 5-10, 10-20, sonra 100 milyona kadar 10'ar milyon, en üstte 100+.
+const SEVIYELER = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(m => m * 1_000_000);
 const seviye = k => { const i = SEVIYELER.findIndex(s => k / 100 < s); return i < 0 ? SEVIYELER.length : i; };
 
 function alacakDogrula(r, komId) {

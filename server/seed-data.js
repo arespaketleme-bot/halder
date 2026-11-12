@@ -24,7 +24,9 @@ export const DEMO_TUCCARLAR = [
   ['Bereket Meyve', 3_600_000], ['Lezzet Gıda', 2_150_000], ['Toros Pazarlama', 4_700_000],
   ['Anadolu Gıda', 7_500_000], ['Güney Sebze', 9_200_000],
   ['Yeşil Hal Pazarlama', 12_400_000], ['Karadeniz Meyve', 18_300_000],
-  ['Marmara Gıda Dağıtım', 27_000_000], ['Akdeniz Market Zinciri', 44_500_000],
-  ['Mega Toptan Gıda', 63_000_000], ['Başkent Hal Ürünleri', 88_000_000],
+  ['Marmara Gıda Dağıtım', 27_000_000], ['Trakya Sebze', 34_000_000],
+  ['Akdeniz Market Zinciri', 44_500_000], ['Mega Toptan Gıda', 56_000_000],
+  ['Çukurova Tarım', 63_000_000], ['İç Anadolu Hal', 77_500_000],
+  ['Başkent Hal Ürünleri', 84_000_000], ['Kuzey Gıda A.Ş.', 96_000_000],
   ['Doğu Gıda Holding', 135_000_000],
 ];
