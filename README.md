@@ -1,35 +1,40 @@
-# Halder – Tüccar Veresiye Takip Sistemi (MVP)
+# Halder – Tüccar Veresiye Takip Sistemi
 
 Komisyoncular tüccarlardan alacaklarını elle veya Excel ile girer; admin listeyi
 belirlediği gün/saatte (varsayılan **Cumartesi 10:00, 60 dk**) yayınlar. Yayın dışında
 liste **sunucu tarafında** kapalıdır (HTTP 423).
 
-## Çalıştırma
-Gereksinim: Node.js 22.5+ (yerleşik `node:sqlite` kullanılır).
+Canlı adres: **https://www.newhal.com/halder/** (newhal sitesi `/halder` isteklerini bu servise iletir).
+
+## Yerelde çalıştırma
+Gereksinim: Node.js 22.5+. `DATABASE_URL` yoksa yerel SQLite (`data/halder.db`) kullanılır.
 
 ```bash
 npm install
-npm run seed     # demo hesaplar ve veriler (bkz. server/seed.js)
-npm start        # http://localhost:3000
-npm test         # yayın penceresi testleri
+npm run seed     # demo hesaplar ve veriler (bkz. server/seed-data.js)
+npm start        # http://localhost:3000/halder/
+npm test         # yayın penceresi birim testleri
+node test/e2e.mjs http://localhost:3000/halder   # uçtan uca test (demo verisiyle)
 ```
 
-## Roller
-- **Admin:** yayın ayarı (gün/saat/süre/otomatik), manuel aç/kapat, komisyoncu onayı, tüm kayıtlar, işlem geçmişi.
-- **Komisyoncu:** kendi kaydını açar (admin onayı gerekir), alacak ekler / Excel yükler, durum günceller, yayında listeyi görür.
+## Ortam değişkenleri
+| Değişken | Açıklama |
+|---|---|
+| `DATABASE_URL` | PostgreSQL bağlantısı (Supabase). Yoksa SQLite. |
+| `BASE_PATH` | Alt adres, varsayılan `/halder`. Kök için boş bırakın. |
+| `NODE_ENV` | `production`: Secure çerez, demo listesi kapalı, seed engelli. |
+| `ADMIN_TELEFON`, `ADMIN_SIFRE`, `ADMIN_AD` | Hiç admin yoksa ilk açılışta bu admin oluşturulur. |
+| `PGSSL` | `false` ise SSL kapatılır (sadece yerel PostgreSQL için). |
 
-## Yayın listesi
-Tüccar (VKN) bazında toplam açık borç, kaç komisyoncuya borçlu olduğu ve vade durumu.
-Komisyoncu bazlı tutarlar ve tam VKN gösterilmez.
+Tablolar `halder_` önekiyle oluşturulur, aynı Supabase veritabanındaki diğer tablolarla çakışmaz.
+
+## Roller
+- **Admin:** yayın ayarı, manuel aç/kapat, komisyoncu sayısı/arama görünürlüğü, komisyoncu onayı, tüm kayıtlar ve tutarlar, işlem geçmişi.
+- **Komisyoncu:** kayıt olur (admin onayı gerekir), alacak ekler / Excel yükler, sadece kendi kayıtlarını ve tutarlarını görür, yayında listeyi renk seviyeleriyle görür.
 
 ## Yapı
 - `server/index.js` – Express API, oturum (HttpOnly çerez), yetki kontrolleri, Excel
+- `server/db.js` – PostgreSQL / SQLite katmanı ve şema
 - `server/yayin.js` – yayın penceresi hesabı (Türkiye saati, UTC+3)
-- `server/db.js` – SQLite şeması (`data/halder.db`)
 - `public/` – mobil uyumlu arayüz
-
-## Üretime çıkmadan önce
-- HTTPS arkasında `NODE_ENV=production` ile çalıştırın (Secure çerez).
-- Demo hesapları silin, gerçek admin oluşturun.
-- KVKK: tüccar açık rızası, aydınlatma metni, itiraz süreci — hukukçu görüşü alın.
-- Planlanan: SMS doğrulama, tüccar itiraz akışı, PostgreSQL'e geçiş, yedekleme.
+- `render.yaml` – Render servis tanımı

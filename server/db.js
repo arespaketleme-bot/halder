@@ -1,61 +1,118 @@
-import { DatabaseSync } from 'node:sqlite';
+// Veritabanı katmanı.
+// DATABASE_URL tanımlıysa PostgreSQL (Supabase), değilse yerel geliştirme için SQLite.
+// Sorgular "?" yer tutucusuyla yazılır; PostgreSQL için $1, $2... çevrilir.
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const file = process.env.DB_FILE || join(root, 'data', 'halder.db');
-if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+export const PG = !!process.env.DATABASE_URL;
+let exec, tx;
 
-export const db = new DatabaseSync(file);
-db.exec(`
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY,
+if (PG) {
+  const { default: pg } = await import('pg');
+  pg.types.setTypeParser(20, Number);   // bigint (COUNT, BIGINT kolonlar)
+  pg.types.setTypeParser(1700, Number); // numeric (SUM)
+  const pool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false },
+    max: 5,
+  });
+  const pgSql = s => { let i = 0; return s.replace(/\?/g, () => '$' + ++i); };
+  const calistir = async (c, sql, p = []) => { const r = await c.query(pgSql(sql), p); return { rows: r.rows, changes: r.rowCount }; };
+  exec = (sql, p) => calistir(pool, sql, p);
+  tx = async fn => {
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      const sonuc = await fn((sql, p) => calistir(c, sql, p));
+      await c.query('COMMIT');
+      return sonuc;
+    } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+  };
+} else {
+  const { DatabaseSync } = await import('node:sqlite');
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const file = process.env.DB_FILE || join(root, 'data', 'halder.db');
+  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  const sq = new DatabaseSync(file);
+  sq.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  exec = async (sql, p = []) => {
+    const st = sq.prepare(sql);
+    if (/^\s*(select|with)\b/i.test(sql) || /\breturning\b/i.test(sql)) { const rows = st.all(...p); return { rows, changes: rows.length }; }
+    const r = st.run(...p);
+    return { rows: [], changes: Number(r.changes) };
+  };
+  tx = async fn => {
+    sq.exec('BEGIN');
+    try { const s = await fn(exec); sq.exec('COMMIT'); return s; } catch (e) { sq.exec('ROLLBACK'); throw e; }
+  };
+  exec.__sqlite = sq;
+}
+
+export const run = (sql, p) => exec(sql, p);
+export const all = async (sql, p) => (await exec(sql, p)).rows;
+export const get = async (sql, p) => (await exec(sql, p)).rows[0];
+export { tx };
+
+const ID = PG ? 'BIGSERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY';
+const ZAMAN = PG ? 'TIMESTAMPTZ NOT NULL DEFAULT now()' : "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP";
+const REF = PG ? 'BIGINT' : 'INTEGER';
+const SEMA = `
+CREATE TABLE IF NOT EXISTS halder_users (
+  id ${ID},
   ad TEXT NOT NULL,
   telefon TEXT NOT NULL UNIQUE,
   sifre_hash TEXT NOT NULL,
   rol TEXT NOT NULL CHECK (rol IN ('admin','kom')),
   durum TEXT NOT NULL DEFAULT 'bekliyor' CHECK (durum IN ('bekliyor','onayli','pasif')),
-  olusturma TEXT NOT NULL DEFAULT (datetime('now'))
+  olusturma ${ZAMAN}
 );
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE IF NOT EXISTS halder_sessions (
   token TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  bitis INTEGER NOT NULL
+  user_id ${REF} NOT NULL REFERENCES halder_users(id) ON DELETE CASCADE,
+  bitis BIGINT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS alacak (
-  id INTEGER PRIMARY KEY,
-  kom_id INTEGER NOT NULL REFERENCES users(id),
+CREATE TABLE IF NOT EXISTS halder_alacak (
+  id ${ID},
+  kom_id ${REF} NOT NULL REFERENCES halder_users(id),
   tuccar TEXT NOT NULL,
   tuccar_key TEXT NOT NULL,
-  tutar_kurus INTEGER NOT NULL CHECK (tutar_kurus > 0),
+  tutar_kurus BIGINT NOT NULL CHECK (tutar_kurus > 0),
   aciklama TEXT,
   durum TEXT NOT NULL DEFAULT 'acik' CHECK (durum IN ('acik','kismi','tahsil')),
-  olusturma TEXT NOT NULL DEFAULT (datetime('now')),
-  guncelleme TEXT NOT NULL DEFAULT (datetime('now'))
+  olusturma ${ZAMAN},
+  guncelleme ${ZAMAN}
 );
-CREATE INDEX IF NOT EXISTS alacak_key ON alacak(tuccar_key);
-CREATE INDEX IF NOT EXISTS alacak_kom ON alacak(kom_id);
-CREATE TABLE IF NOT EXISTS ayar (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS log (
-  id INTEGER PRIMARY KEY,
-  zaman TEXT NOT NULL DEFAULT (datetime('now')),
-  user_id INTEGER,
+CREATE INDEX IF NOT EXISTS halder_alacak_key ON halder_alacak(tuccar_key);
+CREATE INDEX IF NOT EXISTS halder_alacak_kom ON halder_alacak(kom_id);
+CREATE TABLE IF NOT EXISTS halder_ayar (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS halder_log (
+  id ${ID},
+  zaman ${ZAMAN},
+  user_id ${REF},
   islem TEXT NOT NULL
-);
-`);
+);`;
+
+export async function init() {
+  if (PG) await exec(SEMA); else exec.__sqlite.exec(SEMA);
+  // İlk admin: ortam değişkenleriyle, sadece hiç admin yoksa oluşturulur.
+  const { ADMIN_TELEFON, ADMIN_SIFRE, ADMIN_AD } = process.env;
+  if (ADMIN_TELEFON && ADMIN_SIFRE && !(await get("SELECT 1 FROM halder_users WHERE rol='admin'"))) {
+    await run("INSERT INTO halder_users(ad,telefon,sifre_hash,rol,durum) VALUES (?,?,?,'admin','onayli')",
+      [ADMIN_AD || 'Admin', ADMIN_TELEFON, hashle(ADMIN_SIFRE)]);
+    console.log('İlk admin hesabı oluşturuldu.');
+  }
+}
 
 const VARSAYILAN = { gun: 6, saat: '10:00', sure: 60, aktif: true, goster_kom: true, goster_arama: true, manuel_bitis: null, kapat_bitis: null };
 
-export function ayarGetir() {
-  const row = db.prepare("SELECT v FROM ayar WHERE k='yayin'").get();
+export async function ayarGetir() {
+  const row = await get("SELECT v FROM halder_ayar WHERE k='yayin'");
   return { ...VARSAYILAN, ...(row ? JSON.parse(row.v) : {}) };
 }
-export function ayarKaydet(a) {
-  db.prepare("INSERT INTO ayar(k,v) VALUES('yayin',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").run(JSON.stringify(a));
+export async function ayarKaydet(a) {
+  await run("INSERT INTO halder_ayar(k,v) VALUES('yayin',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", [JSON.stringify(a)]);
 }
 
 export function hashle(sifre) {
@@ -69,6 +126,6 @@ export function dogrula(sifre, kayitli) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function logYaz(userId, islem) {
-  db.prepare('INSERT INTO log(user_id, islem) VALUES (?, ?)').run(userId ?? null, islem);
+export async function logYaz(userId, islem) {
+  await run('INSERT INTO halder_log(user_id, islem) VALUES (?, ?)', [userId ?? null, islem]);
 }

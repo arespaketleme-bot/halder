@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: halder
+    env: node
+    region: oregon
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /halder/api/saglik
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: NODE_ENV
+        value: production
+      - key: BASE_PATH
+        value: /halder
+      # Supabase > Project Settings > Database > Connection string (URI, "Transaction pooler")
+      - key: DATABASE_URL
+        sync: false
+      # İlk açılışta admin hesabı bunlarla oluşturulur (admin yoksa).
+      - key: ADMIN_TELEFON
+        sync: false
+      - key: ADMIN_SIFRE
+        sync: false
+      - key: ADMIN_AD
+        value: Admin

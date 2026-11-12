@@ -8,7 +8,7 @@ const tarih = ms => new Date(ms).toLocaleString('tr-TR', { timeZone: 'Europe/Ist
 async function api(yol, { method = 'GET', body, raw } = {}) {
   const h = { 'X-Halder': '1' };
   if (body !== undefined && !raw) h['Content-Type'] = 'application/json';
-  const r = await fetch('/api' + yol, { method, headers: h, body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined });
+  const r = await fetch('api' + yol, { method, headers: h, body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined });
   const d = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (r.status === 401 && yol !== '/giris') { ben = null; ciz(); }
   if (!r.ok) throw new Error(d?.hata || 'Hata ' + r.status);
@@ -94,7 +94,7 @@ function girisEkrani(kayit = false) {
     <button class="btn p" id="g_btn">${kayit ? 'Kayıt ol' : 'Giriş yap'}</button>
     ${kayit ? '' : '<div id="g_demo"></div>'}
     <p class="mut"><a href="#" id="g_sw">${kayit ? 'Hesabım var, giriş yap' : 'Hesabım yok, kayıt ol'}</a></p></div>`;
-  if (!kayit) fetch('/api/dev/demo').then(r => r.ok ? r.json() : []).then(L => {
+  if (!kayit) fetch('api/dev/demo').then(r => r.ok ? r.json() : []).then(L => {
     if (!L.length) return;
     $('#g_demo').innerHTML = `<label>Demo hesap seç (sadece geliştirme, ${L.length} hesap)</label>
       <select id="g_dsel"><option value="">— seçin —</option>
@@ -144,7 +144,7 @@ const V = {
   async yukle() {
     $('#view').innerHTML = `<div class="card"><h2>Excel'den toplu yükleme</h2>
       <p class="mut">Sütunlar: <b>Tüccar, Tutar, Açıklama</b>. Önce şablonu indirip doldurun.</p>
-      <div class="row"><a class="btn" href="/api/excel/sablon">📄 Şablonu indir</a><input type="file" id="x_f" accept=".xlsx" style="width:auto"></div>
+      <div class="row"><a class="btn" href="api/excel/sablon">📄 Şablonu indir</a><input type="file" id="x_f" accept=".xlsx" style="width:auto"></div>
       <p id="x_e" class="err"></p><div id="onizle"></div></div>`;
     $('#x_f').onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
