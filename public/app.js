@@ -10,7 +10,8 @@ async function api(yol, { method = 'GET', body, raw } = {}) {
   if (body !== undefined && !raw) h['Content-Type'] = 'application/json';
   const r = await fetch('api' + yol, { method, headers: h, body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined });
   const d = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
-  if (r.status === 401 && yol !== '/giris') { ben = null; ciz(); }
+  // Oturum düştüyse giriş ekranına dön. Zaten giriş ekranındaysak yeniden çizme (yazılanlar silinmesin).
+  if (r.status === 401 && yol !== '/giris' && ben) { ben = null; ciz(); }
   if (!r.ok) throw new Error(d?.hata || 'Hata ' + r.status);
   return d;
 }
@@ -65,6 +66,7 @@ function ciz() {
 }
 
 async function durumYenile() {
+  if (!ben) return; // giriş yapılmadan yayın durumu sorulmaz
   try { durum = await api('/yayin/durum'); saatFark = durum.simdi - Date.now(); } catch { return; }
   bannerCiz();
 }
