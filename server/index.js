@@ -49,7 +49,7 @@ const kom = (req, res, next) => (req.user?.rol === 'kom' ? next() : hata(res, 40
 const anahtar = ad => ad.toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim();
 
 // Yayında tutar yerine gösterilen seviye (renk). Sınırlar TL cinsinden.
-const SEVIYELER = [1_000_000, 5_000_000, 10_000_000];
+const SEVIYELER = [1_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000, 100_000_000];
 const seviye = k => { const i = SEVIYELER.findIndex(s => k / 100 < s); return i < 0 ? SEVIYELER.length : i; };
 
 function alacakDogrula(r, komId) {

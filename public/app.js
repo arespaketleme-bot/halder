@@ -88,9 +88,10 @@ function girisEkrani(kayit = false) {
     <p class="mut"><a href="#" id="g_sw">${kayit ? 'Hesabım var, giriş yap' : 'Hesabım yok, kayıt ol'}</a></p></div>`;
   if (!kayit) fetch('/api/dev/demo').then(r => r.ok ? r.json() : []).then(L => {
     if (!L.length) return;
-    $('#g_demo').innerHTML = '<p class="mut">Demo hesaplar (sadece geliştirme):</p><div class="row">' +
-      L.map((u, i) => `<button class="btn" data-i="${i}">${esc(u.ad)}${u.durum !== 'onayli' ? ' (onaysız)' : ''}</button>`).join('') + '</div>';
-    $('#g_demo').onclick = e => { const u = L[e.target.dataset.i]; if (u) { $('#g_tel').value = u.telefon; $('#g_sifre').value = u.sifre; } };
+    $('#g_demo').innerHTML = `<label>Demo hesap seç (sadece geliştirme, ${L.length} hesap)</label>
+      <select id="g_dsel"><option value="">— seçin —</option>
+      ${L.map((u, i) => `<option value="${i}">${esc(u.ad)}${u.rol === 'admin' ? ' (Admin)' : ''}${u.durum !== 'onayli' ? ' (onaysız)' : ''}</option>`).join('')}</select>`;
+    $('#g_dsel').onchange = e => { const u = L[e.target.value]; if (u) { $('#g_tel').value = u.telefon; $('#g_sifre').value = u.sifre; } };
   }).catch(() => {});
   $('#g_sw').onclick = e => { e.preventDefault(); girisEkrani(!kayit); };
   const gonder = async () => {
