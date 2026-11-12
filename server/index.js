@@ -20,7 +20,8 @@ app.use((req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' });
   next();
 });
-app.use(express.static(join(dirname(fileURLToPath(import.meta.url)), '..', 'public')));
+// .html uzantısı olmadan da açılır: /halder/sunum → public/sunum.html
+app.use(express.static(join(dirname(fileURLToPath(import.meta.url)), '..', 'public'), { extensions: ['html'] }));
 app.use('/api', express.json({ limit: '2mb' }));
 
 // ---------- yardımcılar ----------
