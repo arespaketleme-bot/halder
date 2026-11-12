@@ -19,6 +19,23 @@ let ben = null, tab = null, durum = null, saatFark = 0;
 const kisa = n => n >= 1e6 ? (n / 1e6).toLocaleString('tr-TR') + ' milyon' : n.toLocaleString('tr-TR');
 const seviyeAd = (S, i) => i === 0 ? `0 – ${kisa(S[0])} ₺` : i >= S.length ? `${kisa(S[S.length - 1])} ₺ ve üzeri` : `${kisa(S[i - 1])} – ${kisa(S[i])} ₺`;
 const lejant = S => `<div class="lejant">${[...S, 0].map((_, i) => `<span><i class="sev s${i}"></i>${seviyeAd(S, i)}</span>`).join('')}</div>`;
+function bildir(mesaj, hataMi = false) {
+  const d = document.createElement('div');
+  d.className = 'toast' + (hataMi ? ' hata' : '');
+  d.textContent = mesaj;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 4000);
+}
+// İki adımlı onay: ilk tık düğmeyi "Emin misin?" yapar, 4 sn içinde ikinci tık işlemi yapar.
+// (confirm() bazı gömülü tarayıcılarda engellendiği için kullanılmıyor.)
+function iki(btn, soru, is) {
+  const ilk = btn.textContent; let t = null;
+  btn.onclick = async () => {
+    if (!t) { btn.textContent = soru; btn.classList.add('emin'); t = setTimeout(() => { btn.textContent = ilk; btn.classList.remove('emin'); t = null; }, 4000); return; }
+    clearTimeout(t); t = null; btn.disabled = true;
+    try { await is(); } catch (e) { bildir(e.message, true); } finally { btn.disabled = false; btn.textContent = ilk; btn.classList.remove('emin'); }
+  };
+}
 const durumP = d => d === 'acik' ? '<span class="pill r">Açık</span>' : d === 'kismi' ? '<span class="pill w">Kısmi</span>' : '<span class="pill">Tahsil edildi</span>';
 
 async function basla() {
@@ -94,17 +111,16 @@ async function cikis() { await api('/cikis', { method: 'POST', body: {} }); ben 
 
 const V = {
   async kayit() {
-    const L = await api('/alacak');
-    const top = L.filter(k => k.durum !== 'tahsil').reduce((a, k) => a + k.tutar_kurus, 0);
+    const L = (await api('/alacak')).filter(k => k.durum !== 'tahsil');
+    const top = L.reduce((a, k) => a + k.tutar_kurus, 0);
     $('#view').innerHTML = `<div class="card"><h2>Yeni alacak ekle</h2><div class="grid">
       <div><label>Tüccar adı *</label><input id="f_t"></div><div><label>Tutar (₺) *</label><input id="f_a" inputmode="decimal" placeholder="15000,50"></div>
       <div><label>Açıklama</label><input id="f_n"></div></div>
       <p id="f_e" class="err"></p><button class="btn p" id="f_btn">Kaydet</button></div>
       <div class="card"><h2>Alacaklarım — açık toplam ${tl(top)}</h2><div class="tw"><table>
-      <tr><th>Tüccar</th><th>Tutar</th><th>Durum</th><th></th></tr>
-      ${L.map(k => `<tr><td>${esc(k.tuccar)}${k.aciklama ? `<div class="mut">${esc(k.aciklama)}</div>` : ''}</td><td>${tl(k.tutar_kurus)}</td><td>${durumP(k.durum)}</td>
-        <td><select data-id="${k.id}" class="dsel" style="width:auto"><option value="">Değiştir…</option><option value="acik">Açık</option><option value="kismi">Kısmi</option><option value="tahsil">Tahsil edildi</option></select>
-        <button class="btn d" data-sil="${k.id}">Sil</button></td></tr>`).join('') || '<tr><td colspan=4 class="mut">Kayıt yok</td></tr>'}
+      <tr><th>Tüccar</th><th>Tutar</th><th></th></tr>
+      ${L.map(k => `<tr><td>${esc(k.tuccar)}${k.aciklama ? `<div class="mut">${esc(k.aciklama)}</div>` : ''}</td><td>${tl(k.tutar_kurus)}</td>
+        <td><button class="btn d" data-sil="${k.id}">Sil</button></td></tr>`).join('') || '<tr><td colspan=3 class="mut">Kayıt yok</td></tr>'}
       </table></div></div>`;
     $('#f_btn').onclick = async () => {
       try {
@@ -112,8 +128,7 @@ const V = {
         ciz();
       } catch (e) { $('#f_e').textContent = e.message; }
     };
-    document.querySelectorAll('.dsel').forEach(s => (s.onchange = async () => { if (s.value) { await api('/alacak/' + s.dataset.id, { method: 'PATCH', body: { durum: s.value } }); ciz(); } }));
-    document.querySelectorAll('[data-sil]').forEach(b => (b.onclick = async () => { if (confirm('Kayıt silinsin mi?')) { await api('/alacak/' + b.dataset.sil, { method: 'DELETE', body: {} }); ciz(); } }));
+    document.querySelectorAll('[data-sil]').forEach(b => iki(b, 'Emin misin?', async () => { await api('/alacak/' + b.dataset.sil, { method: 'DELETE', body: {} }); ciz(); }));
   },
 
   async yukle() {
@@ -134,7 +149,7 @@ const V = {
           <p><button class="btn p" id="x_ok" ${gecerli.length ? '' : 'disabled'}>Geçerli ${gecerli.length} kaydı içe aktar</button></p>`;
         $('#x_ok').onclick = async () => {
           const r = await api('/excel/aktar', { method: 'POST', body: { satirlar: gecerli } });
-          alert(`${r.eklenen} kayıt eklendi${r.atlanan.length ? `, ${r.atlanan.length} atlandı` : ''}.`);
+          bildir(`${r.eklenen} kayıt eklendi${r.atlanan.length ? `, ${r.atlanan.length} atlandı` : ''}.`);
           tab = 'kayit'; ciz();
         };
       } catch (err) { $('#x_e').textContent = err.message; }
@@ -187,7 +202,7 @@ const V = {
       } catch (e) { $('#a_m').className = 'err'; $('#a_m').textContent = e.message; }
     };
     $('#a_ac').onclick = async () => { await api('/admin/yayin', { method: 'POST', body: { ac: true } }); durumYenile(); };
-    $('#a_kp').onclick = async () => { if (confirm('Yayın hemen kapatılsın mı?')) { await api('/admin/yayin', { method: 'POST', body: { ac: false } }); durumYenile(); } };
+    iki($('#a_kp'), 'Emin misin? Kapat', async () => { await api('/admin/yayin', { method: 'POST', body: { ac: false } }); durumYenile(); });
   },
 
   async kullanici() {
