@@ -94,8 +94,18 @@ CREATE TABLE IF NOT EXISTS halder_log (
   islem TEXT NOT NULL
 );`;
 
+// Supabase'de tablolar public şemada; Data API (anon/authenticated) erişemesin diye RLS açılır.
+// Halder sunucusu tablo sahibi olarak doğrudan bağlandığı için RLS'ten etkilenmez.
+const RLS = ['halder_users', 'halder_sessions', 'halder_alacak', 'halder_ayar', 'halder_log']
+  .map(t => `ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;`).join('\n') + `
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON halder_users, halder_sessions, halder_alacak, halder_ayar, halder_log FROM anon, authenticated;
+  END IF;
+END $$;`;
+
 export async function init() {
-  if (PG) await exec(SEMA); else exec.__sqlite.exec(SEMA);
+  if (PG) { await exec(SEMA); await exec(RLS); } else exec.__sqlite.exec(SEMA);
   // İlk admin: ortam değişkenleriyle, sadece hiç admin yoksa oluşturulur.
   const { ADMIN_TELEFON, ADMIN_SIFRE, ADMIN_AD } = process.env;
   if (ADMIN_TELEFON && ADMIN_SIFRE && !(await get("SELECT 1 FROM halder_users WHERE rol='admin'"))) {
