@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PG, init, run, all, get, tx, ayarGetir, ayarKaydet, hashle, dogrula, logYaz } from './db.js';
+import { PG, init, run, all, get, tx, ayarGetir, ayarKaydet, hashle, dogrula, logYaz, demoYukle } from './db.js';
 import { pencere } from './yayin.js';
 
 const PORT = process.env.PORT || 3000;
@@ -43,14 +43,17 @@ app.use('/api', (req, res, next) => {
 app.use('/api', h(async (req, res, next) => {
   const t = cerez(req).oturum;
   if (t) {
-    const s = await get(`SELECT u.id,u.ad,u.telefon,u.rol,u.durum FROM halder_sessions s JOIN halder_users u ON u.id=s.user_id
+    const s = await get(`SELECT u.id,u.ad,u.telefon,u.rol,u.durum,u.demo FROM halder_sessions s JOIN halder_users u ON u.id=s.user_id
                          WHERE s.token=? AND s.bitis>?`, [t, Date.now()]);
-    if (s && s.durum === 'onayli') req.user = s;
+    // Demo hesaplar sadece demo modu açıkken geçerlidir.
+    if (s && s.durum === 'onayli' && (!s.demo || (await ayarGetir()).demo_modu)) req.user = { ...s, demo: !!s.demo };
   }
   next();
 }));
 const girisli = (req, res, next) => (req.user ? next() : hata(res, 401, 'Giriş yapmalısınız'));
 const admin = (req, res, next) => (req.user?.rol === 'admin' ? next() : hata(res, 403, 'Bu işlem sadece admin içindir'));
+const gercek = (req, res, next) => (req.user && !req.user.demo ? next() : hata(res, 403, 'Demo hesabıyla bu işlem yapılamaz'));
+const D = req => (req.user?.demo ? 1 : 0); // sorgularda demo / gerçek veri ayrımı
 const kom = (req, res, next) => (req.user?.rol === 'kom' ? next() : hata(res, 403, 'Bu işlem sadece komisyoncular içindir'));
 
 // Tüccarlar adlarıyla eşleşir: büyük/küçük harf ve fazla boşluk önemsiz.
@@ -72,8 +75,8 @@ async function alacakDogrula(r, komId, q = run) {
     [komId, k.tuccar_key, tutar_kurus])).rows.length) e.push('Mükerrer kayıt');
   return { k, e };
 }
-const ekleKayit = (uid, k, q = run) =>
-  q('INSERT INTO halder_alacak(kom_id,tuccar,tuccar_key,tutar_kurus,aciklama) VALUES (?,?,?,?,?)', [uid, k.tuccar, k.tuccar_key, k.tutar_kurus, k.aciklama]);
+const ekleKayit = (uid, k, demo, q = run) =>
+  q('INSERT INTO halder_alacak(kom_id,tuccar,tuccar_key,tutar_kurus,aciklama,demo) VALUES (?,?,?,?,?,?)', [uid, k.tuccar, k.tuccar_key, k.tutar_kurus, k.aciklama, demo]);
 
 // ---------- oturum ----------
 const denemeler = new Map();
@@ -90,6 +93,7 @@ app.post('/api/giris', h(async (req, res) => {
   denemeler.delete(tel);
   if (u.durum === 'bekliyor') return hata(res, 403, 'Hesabınız admin onayı bekliyor');
   if (u.durum === 'pasif') return hata(res, 403, 'Hesabınız kapatılmış');
+  if (u.demo && !(await ayarGetir()).demo_modu) return hata(res, 403, 'Demo modu şu an kapalı');
   const token = randomBytes(32).toString('hex');
   await run('INSERT INTO halder_sessions(token,user_id,bitis) VALUES (?,?,?)', [token, u.id, Date.now() + OTURUM_SURE]);
   res.set('Set-Cookie', `oturum=${token}; Max-Age=${OTURUM_SURE / 1000}; ${CEREZ}`);
@@ -109,13 +113,12 @@ app.post('/api/kayit', h(async (req, res) => {
   await logYaz(r.id, `Kayıt oldu: ${ad}`);
   res.json({ ok: true, mesaj: 'Kaydınız alındı. Admin onayından sonra giriş yapabilirsiniz.' });
 }));
-// Sadece geliştirmede: giriş ekranındaki demo hesap listesi için.
-if (!URETIM) {
-  app.get('/api/dev/demo', h(async (req, res) => {
-    const { DEMO_HESAPLAR } = await import('./seed-data.js');
-    res.json(DEMO_HESAPLAR);
-  }));
-}
+// Giriş ekranındaki demo hesap listesi: sadece demo modu açıkken dolu gelir.
+app.get('/api/demo/hesaplar', h(async (req, res) => {
+  if (!(await ayarGetir()).demo_modu) return res.json([]);
+  const { DEMO_HESAPLAR } = await import('./seed-data.js');
+  res.json(DEMO_HESAPLAR);
+}));
 app.get('/api/ben', girisli, (req, res) => res.json(req.user));
 
 // ---------- yayın ----------
@@ -123,12 +126,13 @@ app.get('/api/yayin/durum', girisli, h(async (req, res) => res.json({ ...pencere
 app.get('/api/yayin/liste', girisli, h(async (req, res) => {
   const a = await ayarGetir();
   const p = pencere(a);
-  if (!p.acik && req.user.rol !== 'admin') return hata(res, 423, 'Liste şu an yayında değil');
+  // Demo kullanıcılar listeyi yayın saatini beklemeden görebilir (sadece demo verisi).
+  if (!p.acik && req.user.rol !== 'admin' && !req.user.demo) return hata(res, 423, 'Liste şu an yayında değil');
   const rows = await all(`SELECT MAX(tuccar) tuccar, SUM(tutar_kurus) toplam, COUNT(DISTINCT kom_id) kom_sayisi
-    FROM halder_alacak WHERE durum!='tahsil' GROUP BY tuccar_key ORDER BY toplam DESC`);
+    FROM halder_alacak WHERE durum!='tahsil' AND demo=? GROUP BY tuccar_key ORDER BY toplam DESC`, [D(req)]);
   // Tutarın kendisi komisyoncuya gönderilmez, sadece renk seviyesi.
   // Komisyoncu sayısı kapalıysa hiç gönderilmez.
-  res.json({ acik: p.acik, bitis: p.bitis, seviyeler: SEVIYELER, goster_kom: a.goster_kom, goster_arama: a.goster_arama,
+  res.json({ acik: p.acik || req.user.demo, demo: req.user.demo, bitis: p.bitis, seviyeler: SEVIYELER, goster_kom: a.goster_kom, goster_arama: a.goster_arama,
     liste: rows.map(r => ({ tuccar: r.tuccar, seviye: seviye(r.toplam),
       ...(a.goster_kom ? { kom_sayisi: r.kom_sayisi } : {}),
       // Toplam tutar sadece admine gönderilir.
@@ -142,7 +146,7 @@ app.get('/api/alacak', girisli, kom, h(async (req, res) =>
 app.post('/api/alacak', girisli, kom, h(async (req, res) => {
   const { k, e } = await alacakDogrula(req.body, req.user.id);
   if (e.length) return hata(res, 400, e.join(', '));
-  await ekleKayit(req.user.id, k);
+  await ekleKayit(req.user.id, k, D(req));
   await logYaz(req.user.id, `Alacak eklendi: ${k.tuccar} ${(k.tutar_kurus / 100).toFixed(2)} ₺`); // log sadece admine açık
   res.json({ ok: true });
 }));
@@ -214,7 +218,7 @@ app.post('/api/excel/aktar', girisli, kom, h(async (req, res) => {
     for (const r of y.satirlar) {
       const { k, e } = await alacakDogrula({ ...r, tutar: r.tutar_kurus / 100 }, req.user.id, q);
       if (e.length) { atlanan.push({ satir: r.satir, hatalar: e }); continue; }
-      await ekleKayit(req.user.id, k, q);
+      await ekleKayit(req.user.id, k, D(req), q);
       n++;
     }
     return n;
@@ -225,7 +229,7 @@ app.post('/api/excel/aktar', girisli, kom, h(async (req, res) => {
 
 // ---------- admin ----------
 app.get('/api/admin/ayar', girisli, admin, h(async (req, res) => res.json(await ayarGetir())));
-app.put('/api/admin/ayar', girisli, admin, h(async (req, res) => {
+app.put('/api/admin/ayar', girisli, admin, gercek, h(async (req, res) => {
   const { gun, saat, sure, aktif, goster_kom, goster_arama } = req.body;
   if (!Number.isInteger(gun) || gun < 0 || gun > 6 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(saat) || !Number.isInteger(sure) || sure < 5 || sure > 720)
     return hata(res, 400, 'Geçersiz ayar');
@@ -234,7 +238,7 @@ app.put('/api/admin/ayar', girisli, admin, h(async (req, res) => {
   await logYaz(req.user.id, `Yayın ayarı: gün=${gun} saat=${saat} süre=${sure}dk otomatik=${a.aktif ? 'açık' : 'kapalı'} komisyoncu sayısı=${a.goster_kom ? 'göster' : 'gizle'} arama=${a.goster_arama ? 'açık' : 'kapalı'}`);
   res.json(a);
 }));
-app.post('/api/admin/yayin', girisli, admin, h(async (req, res) => {
+app.post('/api/admin/yayin', girisli, admin, gercek, h(async (req, res) => {
   const a = await ayarGetir();
   if (req.body.ac) {
     a.manuel_bitis = Date.now() + a.sure * 60_000;
@@ -248,22 +252,31 @@ app.post('/api/admin/yayin', girisli, admin, h(async (req, res) => {
   await logYaz(req.user.id, req.body.ac ? `Manuel yayın başlatıldı (${a.sure} dk)` : 'Yayın manuel kapatıldı');
   res.json(pencere(a));
 }));
+// Demo modu: sadece gerçek admin açıp kapatabilir. Açılınca demo hesap ve verileri yüklenir.
+app.post('/api/admin/demo', girisli, admin, gercek, h(async (req, res) => {
+  const acik = !!req.body.acik;
+  if (acik) await demoYukle();
+  else await run('DELETE FROM halder_sessions WHERE user_id IN (SELECT id FROM halder_users WHERE demo=TRUE)');
+  await ayarKaydet({ ...(await ayarGetir()), demo_modu: acik });
+  await logYaz(req.user.id, `Demo modu ${acik ? 'açıldı' : 'kapatıldı'}`);
+  res.json({ demo_modu: acik });
+}));
 app.get('/api/admin/kullanicilar', girisli, admin, h(async (req, res) =>
-  res.json(await all('SELECT id,ad,telefon,rol,durum,olusturma FROM halder_users ORDER BY durum, id'))));
+  res.json(await all('SELECT id,ad,telefon,rol,durum,olusturma FROM halder_users WHERE demo=? ORDER BY durum, id', [D(req)]))));
 app.patch('/api/admin/kullanicilar/:id', girisli, admin, h(async (req, res) => {
   const id = Number(req.params.id);
   if (!['onayli', 'pasif', 'bekliyor'].includes(req.body.durum)) return hata(res, 400, 'Geçersiz durum');
   if (id === req.user.id) return hata(res, 400, 'Kendi hesabınızı değiştiremezsiniz');
-  const r = await run("UPDATE halder_users SET durum=? WHERE id=? AND rol='kom'", [req.body.durum, id]);
+  const r = await run("UPDATE halder_users SET durum=? WHERE id=? AND rol='kom' AND demo=?", [req.body.durum, id, D(req)]);
   if (!r.changes) return hata(res, 404, 'Kullanıcı bulunamadı');
   if (req.body.durum !== 'onayli') await run('DELETE FROM halder_sessions WHERE user_id=?', [id]);
   await logYaz(req.user.id, `Kullanıcı #${id} durumu: ${req.body.durum}`);
   res.json({ ok: true });
 }));
 app.get('/api/admin/alacak', girisli, admin, h(async (req, res) =>
-  res.json(await all('SELECT a.*, u.ad kom_ad FROM halder_alacak a JOIN halder_users u ON u.id=a.kom_id ORDER BY a.id DESC'))));
+  res.json(await all('SELECT a.*, u.ad kom_ad FROM halder_alacak a JOIN halder_users u ON u.id=a.kom_id WHERE a.demo=? ORDER BY a.id DESC', [D(req)]))));
 app.get('/api/admin/log', girisli, admin, h(async (req, res) =>
-  res.json(await all('SELECT l.zaman, u.ad, l.islem FROM halder_log l LEFT JOIN halder_users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT 500'))));
+  res.json(await all('SELECT l.zaman, u.ad, l.islem FROM halder_log l LEFT JOIN halder_users u ON u.id=l.user_id WHERE COALESCE(u.demo, FALSE)=? ORDER BY l.id DESC LIMIT 500', [D(req)]))));
 
 app.use('/api', (req, res) => hata(res, 404, 'Bulunamadı'));
 app.use((err, req, res, next) => { console.error(err); hata(res, 500, 'Sunucu hatası'); });

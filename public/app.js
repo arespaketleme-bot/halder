@@ -53,7 +53,7 @@ async function basla() {
 }
 
 function ciz() {
-  $('#kim').innerHTML = ben ? `${esc(ben.ad)} <button onclick="cikis()">Çıkış</button>` : '';
+  $('#kim').innerHTML = ben ? `${ben.demo ? '<span class="pill w">DEMO</span> ' : ''}${esc(ben.ad)} <button onclick="cikis()">Çıkış</button>` : '';
   if (!ben) { $('#nav').innerHTML = ''; $('#banner').hidden = true; return girisEkrani(); }
   const tabs = ben.rol === 'admin'
     ? [['yayin', 'Yayın Listesi'], ['ayar', 'Yayın Ayarları'], ['kullanici', 'Kullanıcılar'], ['tum', 'Tüm Kayıtlar'], ['log', 'İşlem Geçmişi']]
@@ -96,9 +96,9 @@ function girisEkrani(kayit = false) {
     <button class="btn p" id="g_btn">${kayit ? 'Kayıt ol' : 'Giriş yap'}</button>
     ${kayit ? '' : '<div id="g_demo"></div>'}
     <p class="mut"><a href="#" id="g_sw">${kayit ? 'Hesabım var, giriş yap' : 'Hesabım yok, kayıt ol'}</a></p></div>`;
-  if (!kayit) fetch('api/dev/demo').then(r => r.ok ? r.json() : []).then(L => {
+  if (!kayit) fetch('api/demo/hesaplar').then(r => r.ok ? r.json() : []).then(L => {
     if (!L.length) return;
-    $('#g_demo').innerHTML = `<label>Demo hesap seç (sadece geliştirme, ${L.length} hesap)</label>
+    $('#g_demo').innerHTML = `<label>Demo hesap seç (${L.length} hesap, şifre: demo1234)</label>
       <select id="g_dsel"><option value="">— seçin —</option>
       ${L.map((u, i) => `<option value="${i}">${esc(u.ad)}${u.rol === 'admin' ? ' (Admin)' : ''}${u.durum !== 'onayli' ? ' (onaysız)' : ''}</option>`).join('')}</select>`;
     $('#g_dsel').onchange = e => { const u = L[e.target.value]; if (u) { $('#g_tel').value = u.telefon; $('#g_sifre').value = u.sifre; } };
@@ -206,7 +206,20 @@ const V = {
       <label class="chk"><input type="checkbox" id="a_kom" ${a.goster_kom ? 'checked' : ''}> Komisyoncu sayısı</label>
       <label class="chk"><input type="checkbox" id="a_ara" ${a.goster_arama ? 'checked' : ''}> Tüccar arama kutusu</label>
       <p id="a_m" class="ok"></p><button class="btn p" id="a_k">Kaydet</button></div>
-      <div class="card"><h2>Manuel kontrol</h2><div class="row"><button class="btn p" id="a_ac">Şimdi yayınla (${a.sure} dk)</button><button class="btn d" id="a_kp">Yayını hemen kapat</button></div></div>`;
+      <div class="card"><h2>Manuel kontrol</h2><div class="row"><button class="btn p" id="a_ac">Şimdi yayınla (${a.sure} dk)</button><button class="btn d" id="a_kp">Yayını hemen kapat</button></div></div>
+      ${ben.demo ? '<div class="card mut">Demo hesabındasınız: ayarları görebilir ama değiştiremezsiniz.</div>' : `
+      <div class="card"><h2>Demo modu <span class="pill ${a.demo_modu ? 'w' : ''}">${a.demo_modu ? 'Açık' : 'Kapalı'}</span></h2>
+        <p class="mut">Açıkken giriş ekranında demo hesaplar listelenir ve herkes <b>demo1234</b> şifresiyle deneme yapabilir.
+        Demo hesaplar sadece demo verilerini görür; gerçek tüccar ve alacak kayıtlarınız onlara hiç gösterilmez.
+        Kapatınca demo hesaplarla giriş yapılamaz ve açık demo oturumları kapanır.</p>
+        <button class="btn ${a.demo_modu ? 'd' : 'p'}" id="a_demo">${a.demo_modu ? 'Demo modunu kapat' : 'Demo modunu aç'}</button></div>`}`;
+    if (!ben.demo) $('#a_demo').onclick = async () => {
+      try {
+        const r = await api('/admin/demo', { method: 'POST', body: { acik: !a.demo_modu } });
+        bildir(r.demo_modu ? 'Demo modu açıldı; demo hesaplar hazır.' : 'Demo modu kapatıldı.');
+        ciz();
+      } catch (e) { bildir(e.message, true); }
+    };
     $('#a_k').onclick = async () => {
       try {
         await api('/admin/ayar', { method: 'PUT', body: { gun: +$('#a_g').value, saat: $('#a_s').value, sure: +$('#a_d').value, aktif: $('#a_a').value === '1', goster_kom: $('#a_kom').checked, goster_arama: $('#a_ara').checked } });

@@ -104,29 +104,64 @@ DO $$ BEGIN
   END IF;
 END $$;`;
 
+// Demo kayıtları "demo" sütunuyla işaretlenir; demo ve gerçek veriler birbirini görmez.
+async function demoKolonu(tablo) {
+  try { await exec(`ALTER TABLE ${tablo} ADD COLUMN ${PG ? 'IF NOT EXISTS ' : ''}demo BOOLEAN NOT NULL DEFAULT FALSE`); }
+  catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+}
+
 export async function init() {
   if (PG) { await exec(SEMA); await exec(RLS); } else exec.__sqlite.exec(SEMA);
+  await demoKolonu('halder_users');
+  await demoKolonu('halder_alacak');
   // Admin hesabı ortam değişkenlerinden yönetilir: ADMIN_TELEFON'lu admin yoksa oluşturulur,
-  // varsa şifresi her açılışta ADMIN_SIFRE ile eşitlenir (şifreyi Render'dan değiştirmek yeter).
+  // varsa ve şifresi farklıysa ADMIN_SIFRE ile eşitlenir (şifreyi Render'dan değiştirmek yeter).
   const { ADMIN_TELEFON, ADMIN_SIFRE, ADMIN_AD } = process.env;
   if (ADMIN_TELEFON && ADMIN_SIFRE) {
     const tel = ADMIN_TELEFON.replace(/\D/g, '').replace(/^90/, '').replace(/^(?!0)/, '0');
-    const mevcut = await get('SELECT id, rol FROM halder_users WHERE telefon=?', [tel]);
+    const mevcut = await get('SELECT id, rol, sifre_hash, demo FROM halder_users WHERE telefon=?', [tel]);
     if (!mevcut) {
       await run("INSERT INTO halder_users(ad,telefon,sifre_hash,rol,durum) VALUES (?,?,?,'admin','onayli')",
         [ADMIN_AD || 'Admin', tel, hashle(ADMIN_SIFRE)]);
       console.log('Admin hesabı oluşturuldu.');
-    } else if (mevcut.rol === 'admin') {
-      await run("UPDATE halder_users SET sifre_hash=?, durum='onayli' WHERE id=?", [hashle(ADMIN_SIFRE), mevcut.id]);
-      await run('DELETE FROM halder_sessions WHERE user_id=?', [mevcut.id]);
-      console.log('Admin şifresi ADMIN_SIFRE ile eşitlendi.');
+    } else if (mevcut.rol === 'admin' && !mevcut.demo) {
+      if (!dogrula(ADMIN_SIFRE, mevcut.sifre_hash)) {
+        await run("UPDATE halder_users SET sifre_hash=?, durum='onayli' WHERE id=?", [hashle(ADMIN_SIFRE), mevcut.id]);
+        await run('DELETE FROM halder_sessions WHERE user_id=?', [mevcut.id]);
+        console.log('Admin şifresi ADMIN_SIFRE ile eşitlendi.');
+      }
     } else {
-      console.error('ADMIN_TELEFON bir komisyoncu hesabına ait; admin yapılmadı.');
+      console.error('ADMIN_TELEFON bir komisyoncu ya da demo hesabına ait; admin yapılmadı.');
     }
   }
 }
 
-const VARSAYILAN = { gun: 6, saat: '10:00', sure: 60, aktif: true, goster_kom: true, goster_arama: true, manuel_bitis: null, kapat_bitis: null };
+// Demo hesapları ve demo alacaklarını yükler (zaten varsa dokunmaz).
+export async function demoYukle() {
+  const { DEMO_HESAPLAR, DEMO_TUCCARLAR } = await import('./seed-data.js');
+  for (const u of DEMO_HESAPLAR)
+    await run('INSERT INTO halder_users(ad,telefon,sifre_hash,rol,durum,demo) VALUES (?,?,?,?,?,TRUE) ON CONFLICT (telefon) DO NOTHING',
+      [u.ad, u.telefon, hashle(u.sifre), u.rol, u.durum]);
+  if ((await get('SELECT COUNT(*) n FROM halder_alacak WHERE demo=TRUE')).n) return;
+  const komlar = (await all("SELECT id FROM halder_users WHERE rol='kom' AND durum='onayli' AND demo=TRUE ORDER BY id")).map(r => r.id);
+  if (!komlar.length) return;
+  const ekle = (kid, ad, kurus, durum) => run(
+    'INSERT INTO halder_alacak(kom_id,tuccar,tuccar_key,tutar_kurus,durum,demo) VALUES (?,?,?,?,?,TRUE)',
+    [kid, ad, ad.toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim(), kurus, durum]);
+  // Sabit tohumlu basit rastgele sayı üreteci: her yüklemede aynı veri.
+  let s = 42;
+  const rnd = () => ((s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+  for (const [ti, [ad, hedef]] of DEMO_TUCCARLAR.entries()) {
+    const n = 1 + Math.floor(rnd() * 6);
+    const secilen = [...komlar].sort(() => rnd() - 0.5).slice(0, n);
+    const paylar = secilen.map(() => 0.5 + rnd());
+    const top = paylar.reduce((x, y) => x + y, 0);
+    for (const [i, kid] of secilen.entries()) await ekle(kid, ad, Math.round((hedef * paylar[i]) / top / 100) * 100 * 100, 'acik');
+    if (ti % 4 === 0) await ekle(secilen[0], ad, 150_000 * 100, 'tahsil');
+  }
+}
+
+const VARSAYILAN = { gun: 6, saat: '10:00', sure: 60, aktif: true, goster_kom: true, goster_arama: true, demo_modu: false, manuel_bitis: null, kapat_bitis: null };
 
 export async function ayarGetir() {
   const row = await get("SELECT v FROM halder_ayar WHERE k='yayin'");

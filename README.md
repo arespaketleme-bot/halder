@@ -14,7 +14,7 @@ npm install
 npm run seed     # demo hesaplar ve veriler (bkz. server/seed-data.js)
 npm start        # http://localhost:3000/halder/
 npm test         # yayın penceresi birim testleri
-node test/e2e.mjs http://localhost:3000/halder   # uçtan uca test (demo verisiyle)
+E2E_ADMIN_TEL=.. E2E_ADMIN_SIFRE=.. node test/e2e.mjs http://localhost:3000/halder   # uçtan uca test (sunucu aynı ADMIN_* ile başlatılmalı)
 ```
 
 ## Ortam değişkenleri
@@ -38,3 +38,10 @@ Tablolar `halder_` önekiyle oluşturulur, aynı Supabase veritabanındaki diğe
 - `server/yayin.js` – yayın penceresi hesabı (Türkiye saati, UTC+3)
 - `public/` – mobil uyumlu arayüz
 - `render.yaml` – Render servis tanımı
+
+## Demo modu
+Admin → **Yayın Ayarları** → **Demo modu** ile açılıp kapatılır (sadece gerçek admin).
+- Açıkken giriş ekranında demo hesaplar listelenir (şifre `demo1234`, bkz. `server/seed-data.js`).
+- Demo kayıtları `demo` sütunuyla işaretlidir: demo hesaplar sadece demo verisini, gerçek hesaplar sadece gerçek veriyi görür.
+- Demo admin ayarları görebilir ama yayın ayarlarını, yayını ve demo modunu değiştiremez.
+- Kapatınca demo hesaplarla giriş yapılamaz ve açık demo oturumları kapanır.
