@@ -128,8 +128,8 @@ app.get('/api/yayin/liste', girisli, (req, res) => {
 
 // ---------- komisyoncu: alacaklar ----------
 app.get('/api/alacak', girisli, kom, (req, res) =>
-  // Tutarları sadece admin görür; komisyoncuya tutar gönderilmez.
-  res.json(db.prepare("SELECT id, tuccar, aciklama, olusturma FROM alacak WHERE kom_id=? AND durum!='tahsil' ORDER BY id DESC").all(req.user.id)));
+  // Komisyoncu sadece kendi eklediği kayıtları ve tutarlarını görür.
+  res.json(db.prepare("SELECT id, tuccar, tutar_kurus, aciklama, olusturma FROM alacak WHERE kom_id=? AND durum!='tahsil' ORDER BY id DESC").all(req.user.id)));
 app.post('/api/alacak', girisli, kom, (req, res) => {
   const { k, e } = alacakDogrula(req.body, req.user.id);
   if (e.length) return hata(res, 400, e.join(', '));
@@ -193,10 +193,10 @@ app.post('/api/excel/onizle', girisli, kom, express.raw({ type: () => true, limi
     gorulen.add(tekrar);
     satirlar.push({ satir: n, ...k, hatalar: e });
   });
-  // Ayrıştırılan satırlar sunucuda bekletilir; istemciye tutar gönderilmez.
+  // Ayrıştırılan satırlar sunucuda bekletilir; aktarım token ile yapılır.
   const token = randomBytes(16).toString('hex');
   yuklemeler.set(token, { uid: req.user.id, t: Date.now(), satirlar: satirlar.filter(r => !r.hatalar.length) });
-  res.json({ token, satirlar: satirlar.map(r => ({ satir: r.satir, tuccar: r.tuccar, aciklama: r.aciklama, hatalar: r.hatalar })) });
+  res.json({ token, satirlar: satirlar.map(r => ({ satir: r.satir, tuccar: r.tuccar, tutar_kurus: r.tutar_kurus, aciklama: r.aciklama, hatalar: r.hatalar })) });
 });
 app.post('/api/excel/aktar', girisli, kom, (req, res) => {
   const y = yuklemeler.get(String(req.body.token || ''));
