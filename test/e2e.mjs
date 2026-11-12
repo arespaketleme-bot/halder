@@ -22,7 +22,9 @@ const A = DEMO_HESAPLAR[0], K1 = DEMO_HESAPLAR[1], K2 = DEMO_HESAPLAR[2], BEKLEY
 
 await t('kök adres /halder/ adresine yönleniyor', async () => {
   const r = await fetch(KOK, { redirect: 'manual' });
-  assert.equal(r.status, 301); assert.ok(r.headers.get('location').endsWith('/halder/'));
+  // Doğrudan sunucu 301 verir; newhal vekili üzerinden sayfa gelir ve sayfa kendini "/" ile yeniden açar.
+  if (r.status === 301) assert.ok(r.headers.get('location').endsWith('/halder/'));
+  else { assert.equal(r.status, 200); assert.match(await r.text(), /location\.replace\(location\.pathname \+ '\/'/); }
   assert.equal((await fetch(KOK + '/')).status, 200);
 });
 await t('girişler ve çerez yolu', async () => {

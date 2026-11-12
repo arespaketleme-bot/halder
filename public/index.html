@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+  // Göreli adreslerin doğru çözülmesi için sayfa her zaman ".../halder/" ile açılmalı.
+  if (!location.pathname.endsWith('/') && !/\.[a-z0-9]+$/i.test(location.pathname)) location.replace(location.pathname + '/' + location.search);
+</script>
 <title>Halder Veresiye</title>
 <link rel="stylesheet" href="style.css">
 </head>
