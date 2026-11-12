@@ -128,12 +128,13 @@ app.get('/api/yayin/liste', girisli, (req, res) => {
 
 // ---------- komisyoncu: alacaklar ----------
 app.get('/api/alacak', girisli, kom, (req, res) =>
-  res.json(db.prepare('SELECT * FROM alacak WHERE kom_id=? ORDER BY id DESC').all(req.user.id)));
+  // Tutarları sadece admin görür; komisyoncuya tutar gönderilmez.
+  res.json(db.prepare("SELECT id, tuccar, aciklama, olusturma FROM alacak WHERE kom_id=? AND durum!='tahsil' ORDER BY id DESC").all(req.user.id)));
 app.post('/api/alacak', girisli, kom, (req, res) => {
   const { k, e } = alacakDogrula(req.body, req.user.id);
   if (e.length) return hata(res, 400, e.join(', '));
   ekleKayit(req.user.id, k);
-  logYaz(req.user.id, `Alacak eklendi: ${k.tuccar} ${(k.tutar_kurus / 100).toFixed(2)} ₺`);
+  logYaz(req.user.id, `Alacak eklendi: ${k.tuccar} ${(k.tutar_kurus / 100).toFixed(2)} ₺`); // log sadece admine açık
   res.json({ ok: true });
 });
 app.patch('/api/alacak/:id', girisli, kom, (req, res) => {
@@ -152,6 +153,8 @@ app.delete('/api/alacak/:id', girisli, kom, (req, res) => {
 
 // ---------- Excel ----------
 const BASLIK = ['Tüccar', 'Tutar', 'Açıklama'];
+const yuklemeler = new Map(); // önizleme token -> { uid, t, satirlar }
+setInterval(() => { for (const [k, v] of yuklemeler) if (Date.now() - v.t > 30 * 60_000) yuklemeler.delete(k); }, 600_000).unref();
 app.get('/api/excel/sablon', girisli, async (req, res) => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Alacaklar');
@@ -190,10 +193,16 @@ app.post('/api/excel/onizle', girisli, kom, express.raw({ type: () => true, limi
     gorulen.add(tekrar);
     satirlar.push({ satir: n, ...k, hatalar: e });
   });
-  res.json({ satirlar });
+  // Ayrıştırılan satırlar sunucuda bekletilir; istemciye tutar gönderilmez.
+  const token = randomBytes(16).toString('hex');
+  yuklemeler.set(token, { uid: req.user.id, t: Date.now(), satirlar: satirlar.filter(r => !r.hatalar.length) });
+  res.json({ token, satirlar: satirlar.map(r => ({ satir: r.satir, tuccar: r.tuccar, aciklama: r.aciklama, hatalar: r.hatalar })) });
 });
 app.post('/api/excel/aktar', girisli, kom, (req, res) => {
-  const gelen = Array.isArray(req.body.satirlar) ? req.body.satirlar.slice(0, 2000) : [];
+  const y = yuklemeler.get(String(req.body.token || ''));
+  if (!y || y.uid !== req.user.id || Date.now() - y.t > 30 * 60_000) return hata(res, 400, 'Önizleme süresi doldu, dosyayı tekrar yükleyin');
+  yuklemeler.delete(req.body.token);
+  const gelen = y.satirlar;
   let eklenen = 0;
   const atlanan = [];
   db.exec('BEGIN');

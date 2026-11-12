@@ -112,20 +112,20 @@ async function cikis() { await api('/cikis', { method: 'POST', body: {} }); ben 
 
 const V = {
   async kayit() {
-    const L = (await api('/alacak')).filter(k => k.durum !== 'tahsil');
-    const top = L.reduce((a, k) => a + k.tutar_kurus, 0);
+    const L = await api('/alacak'); // tutar içermez: rakamları sadece admin görür
     $('#view').innerHTML = `<div class="card"><h2>Yeni alacak ekle</h2><div class="grid">
       <div><label>Tüccar adı *</label><input id="f_t"></div><div><label>Tutar (₺) *</label><input id="f_a" inputmode="decimal" placeholder="15000,50"></div>
       <div><label>Açıklama</label><input id="f_n"></div></div>
       <p id="f_e" class="err"></p><button class="btn p" id="f_btn">Kaydet</button></div>
-      <div class="card"><h2>Alacaklarım — açık toplam ${tl(top)}</h2><div class="tw"><table>
-      <tr><th>Tüccar</th><th>Tutar</th><th></th></tr>
-      ${L.map(k => `<tr><td>${esc(k.tuccar)}${k.aciklama ? `<div class="mut">${esc(k.aciklama)}</div>` : ''}</td><td>${tl(k.tutar_kurus)}</td>
+      <div class="card"><h2>Alacaklarım (${L.length} kayıt)</h2><p class="mut">Tutarlar güvenlik için sadece admin tarafından görüntülenebilir.</p><div class="tw"><table>
+      <tr><th>Tüccar</th><th>Eklenme</th><th></th></tr>
+      ${L.map(k => `<tr><td>${esc(k.tuccar)}${k.aciklama ? `<div class="mut">${esc(k.aciklama)}</div>` : ''}</td><td class="mut">${esc(k.olusturma.slice(0, 10))}</td>
         <td><button class="btn d" data-sil="${k.id}">Sil</button></td></tr>`).join('') || '<tr><td colspan=3 class="mut">Kayıt yok</td></tr>'}
       </table></div></div>`;
     $('#f_btn').onclick = async () => {
       try {
         await api('/alacak', { method: 'POST', body: { tuccar: $('#f_t').value, tutar: $('#f_a').value, aciklama: $('#f_n').value } });
+        bildir('Alacak kaydedildi');
         ciz();
       } catch (e) { $('#f_e').textContent = e.message; }
     };
@@ -141,15 +141,15 @@ const V = {
       const f = e.target.files[0]; if (!f) return;
       $('#x_e').textContent = '';
       try {
-        const { satirlar } = await api('/excel/onizle', { method: 'POST', body: f, raw: true });
+        const { token, satirlar } = await api('/excel/onizle', { method: 'POST', body: f, raw: true });
         const gecerli = satirlar.filter(r => !r.hatalar.length);
         $('#onizle').innerHTML = `<h2 style="margin-top:16px">Önizleme: ${gecerli.length} geçerli / ${satirlar.length - gecerli.length} hatalı</h2>
-          <div class="tw"><table><tr><th>Satır</th><th>Tüccar</th><th>Tutar</th><th>Kontrol</th></tr>
-          ${satirlar.map(r => `<tr><td>${r.satir}</td><td>${esc(r.tuccar)}</td><td>${r.tutar_kurus > 0 ? tl(r.tutar_kurus) : '-'}</td>
+          <div class="tw"><table><tr><th>Satır</th><th>Tüccar</th><th>Kontrol</th></tr>
+          ${satirlar.map(r => `<tr><td>${r.satir}</td><td>${esc(r.tuccar)}</td>
             <td>${r.hatalar.length ? `<span class="err">${esc(r.hatalar.join(', '))}</span>` : '<span class="pill">OK</span>'}</td></tr>`).join('')}</table></div>
           <p><button class="btn p" id="x_ok" ${gecerli.length ? '' : 'disabled'}>Geçerli ${gecerli.length} kaydı içe aktar</button></p>`;
         $('#x_ok').onclick = async () => {
-          const r = await api('/excel/aktar', { method: 'POST', body: { satirlar: gecerli } });
+          const r = await api('/excel/aktar', { method: 'POST', body: { token } });
           bildir(`${r.eklenen} kayıt eklendi${r.atlanan.length ? `, ${r.atlanan.length} atlandı` : ''}.`);
           tab = 'kayit'; ciz();
         };
