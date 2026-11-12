@@ -116,7 +116,8 @@ function girisEkrani(kayit = false) {
     } catch (e) { $('#g_msg').className = 'err'; $('#g_msg').textContent = e.message; }
   };
   $('#g_btn').onclick = gonder;
-  $('#g_sifre').onkeydown = e => e.key === 'Enter' && gonder();
+  // Sadece Enter'da gönder; diğer tuşlara karışma (false döndürmek Backspace/yazmayı engelliyordu).
+  for (const id of ['#g_tel', '#g_sifre']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); gonder(); } });
 }
 async function cikis() { await api('/cikis', { method: 'POST', body: {} }); ben = null; ciz(); }
 
