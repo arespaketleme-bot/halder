@@ -1,8 +1,10 @@
 services:
   - type: web
     name: halder
-    env: node
-    region: oregon
+    runtime: node
+    plan: free
+    # Supabase veritabanı Frankfurt'ta (eu-central-1); servis de yakınında çalışsın.
+    region: frankfurt
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /halder/api/saglik
@@ -13,13 +15,14 @@ services:
         value: production
       - key: BASE_PATH
         value: /halder
-      # Supabase > Connect > Connection string > "Session pooler" (URI). Şifreyi yerine yazmayı unutmayın.
+      # Supabase > Connect > Direct > Session pooler (URI). [YOUR-PASSWORD] yerine veritabanı şifresi yazılır.
       - key: DATABASE_URL
         sync: false
       # İlk açılışta admin hesabı bunlarla oluşturulur (admin yoksa).
       - key: ADMIN_TELEFON
         sync: false
+      # Render güçlü bir şifre üretir; Render > halder > Environment bölümünden görülebilir.
       - key: ADMIN_SIFRE
-        sync: false
+        generateValue: true
       - key: ADMIN_AD
         value: Admin
