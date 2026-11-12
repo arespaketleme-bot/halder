@@ -13,7 +13,7 @@ services:
         value: production
       - key: BASE_PATH
         value: /halder
-      # Supabase > Project Settings > Database > Connection string (URI, "Transaction pooler")
+      # Supabase > Connect > Connection string > "Session pooler" (URI). Şifreyi yerine yazmayı unutmayın.
       - key: DATABASE_URL
         sync: false
       # İlk açılışta admin hesabı bunlarla oluşturulur (admin yoksa).
